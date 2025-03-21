@@ -86,13 +86,16 @@ def _get_arguments():
 
     args = {
         'folderpath' : sys.argv[1],
-        'no_log' : False
+        'no_log' : False,
+        'no_deletion' : False
     }
 
 
     for i in range(len(sys.argv)):
-        if sys.argv[i]=="-nl":
+        if sys.argv[i] in ["-nl", "-nolog"]:
             args['no_log'] = True
+        elif sys.argv[i] in ["-nd", "-nodeletion"]:
+            args['no_deletion'] = True
 
     return args
 
@@ -122,6 +125,7 @@ _log("", None)
 # Get datas
 datas = _get_file_datas(args['folderpath'])
 folder_datas = {}
+dupe_datas = {}
 
 _log("", logfile)
 _log("", logfile)
@@ -135,6 +139,9 @@ for k in datas:
 
     # Iterate dupes
     if len(datas[k]['occurences']) > 1:
+
+        # Get only dupe datas in dict
+        dupe_datas[k] = datas[k]
 
         _log(f"FILE - {datas[k]['name']} - found in :", logfile)
 
@@ -166,3 +173,68 @@ for fp in folder_datas:
 
 time_elapsed = float(time.time()-time_start)
 _log(f"Folder analyzed in {round(time_elapsed, 5)} seconds", logfile)
+
+
+### REMOVE FILES GUI
+if not args['no_deletion']:
+
+    _log("Launching deletion sequence", None)
+    _log("", None)
+
+
+    import tkinter as tk
+    from tkinter import ttk, filedialog
+
+    # TKinter gui class
+    class RemoveFilesApp(tk.Tk):
+        file_count = 0
+        total = len(dupe_datas)
+
+        def __init__(self):
+            tk.Tk.__init__(self)
+            self.title("Deletion")
+            self.create_widget()
+
+        def delete_file(self, filepath):
+            # Delete filepath
+            for fp in dupe_datas[list(dupe_datas)[self.file_count]]['occurences']:
+                if fp != filepath:
+                    if os.path.isfile(fp):
+                        _log(f"Deleting {fp}", None)
+                        os.remove(fp)
+                    else:
+                        _log(f"Invalid filpath - {fp}", None)
+
+            # Increment
+            self.file_count += 1
+
+            # Quit when finished
+            if self.file_count>=self.total:
+                log("End of dupe files, exiting", None)
+                exit()
+
+            # Reload
+            self.destroy()
+            self.__init__()
+
+        def create_widget(self):
+            tk.Label(
+                text = "Choose a file to keep :",
+            ).pack()
+
+            for fp in dupe_datas[list(dupe_datas)[self.file_count]]['occurences']:
+                tk.Button(
+                    self,
+                    text = fp,
+                    command = lambda fp=fp: self.delete_file(fp)
+                ).pack()
+
+            tk.Button(
+                self,
+                text = "Quit",
+                command = exit,
+            ).pack()
+
+    # Launch app
+    app = RemoveFilesApp()
+    app.mainloop()

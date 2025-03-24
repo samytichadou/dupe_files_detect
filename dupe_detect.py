@@ -51,9 +51,17 @@ def _get_file_datas(
     count = 0
     for root, dirs, files in os.walk(folderpath):
         for filename in files:
-
             count += 1
             _update_print(count, counter_len, total)
+
+            # Exclusion check
+            exclude = False
+            for ex in args['exclusion_folder']:
+                if ex in os.path.abspath(root):
+                    exclude = True
+                    break
+            if exclude:
+                continue
 
             filepath = os.path.join(root, filename)
             filesize = os.path.getsize(filepath)
@@ -87,7 +95,11 @@ def _get_arguments():
     args = {
         'folderpath' : sys.argv[1],
         'no_log' : False,
-        'no_deletion' : False
+        'no_deletion' : False,
+        'exclusion_folder': [],
+        'priority_folder': [],
+        'dry_run': False,
+        'verbose': 0
     }
 
 
@@ -96,6 +108,14 @@ def _get_arguments():
             args['no_log'] = True
         elif sys.argv[i] in ["-nd", "-nodeletion"]:
             args['no_deletion'] = True
+        elif sys.argv[i] in ["-pf", "-priorityfolder"]:
+            args['priority_folder'] = sys.argv[i+1].split(",")
+        elif sys.argv[i] in ["-d", "-dry"]:
+            args['dry_run'] = True
+        elif sys.argv[i] in ["-v", "-verbose"]:
+            args['verbose'] = sys.argv[i+1]
+        elif sys.argv[i] in ["-ex", "-exclusion"]:
+            args['exclusion_folder'] = sys.argv[i+1].split(",")
 
     return args
 
@@ -115,11 +135,14 @@ dtime_read = dtime.strftime('%Y-%m-%d %H:%M:%S')
 # Open log file to write
 logfile = None
 if not args['no_log']:
-    logfile = open(f"{dtime_stamp}_log_dupe.txt","w")
+    logfile = open(f"{dtime_stamp}_dupe.log","w")
 
 _log("", None)
 _log(f"Folder : {args['folderpath']}", logfile)
 _log(f"{dtime_read} - Starting to analyze files", logfile)
+_log("", None)
+_log("Arguments :", None)
+_log(args, None)
 _log("", None)
 
 # Get datas
@@ -156,8 +179,6 @@ for k in datas:
                 }
             folder_datas[parentdir]['dupes'].append(datas[k]['name'])
 
-        _log("", logfile)
-
 _log("", logfile)
 
 # By folder
@@ -169,18 +190,56 @@ for fp in folder_datas:
     for f in folder_datas[fp]['dupes']:
         _log(f"    {f}", logfile)
 
-    _log("", logfile)
-
 time_elapsed = float(time.time()-time_start)
+
+_log("", logfile)
 _log(f"Folder analyzed in {round(time_elapsed, 5)} seconds", logfile)
 
 
 ### REMOVE FILES GUI
 if not args['no_deletion']:
 
-    _log("Launching deletion sequence", None)
-    _log("", None)
+    _log("", logfile)
+    _log("Launching deletion sequence", logfile)
+    _log("", logfile)
 
+    # Automatic removal
+    if args['priority_folder']:
+
+        _log("Automatic removal with priority_folder", logfile)
+
+        dupe_to_remove = []
+        for dupe in dupe_datas:
+
+            prio = []
+            occurences = dupe_datas[dupe]['occurences']
+
+            for fp in occurences:
+                for patt in args['priority_folder']:
+                    if patt in fp:
+                        prio.append(fp)
+                        break
+
+            if len(prio)==1:
+                for fp in occurences:
+                    if fp not in prio:
+                        _log(f"Deleting {fp}", logfile)
+                        if not args['dry_run']:
+                            os.remove(fp)
+                dupe_to_remove.append(dupe)
+
+        for dupe in dupe_to_remove:
+            del dupe_datas[dupe]
+
+    # Manual removal
+    _log("", logfile)
+
+    if not dupe_datas:
+        _log("End of dupe files, exiting", None)
+        logfile.close()
+        exit()
+
+    _log("Manual removal with user input", logfile)
 
     import tkinter as tk
     from tkinter import ttk, filedialog
@@ -195,22 +254,29 @@ if not args['no_deletion']:
             self.title("Deletion")
             self.create_widget()
 
+        def manual_quit(self):
+            _log("User exiting", logfile)
+            logfile.close()
+            exit()
+
         def delete_file(self, filepath):
             # Delete filepath
             for fp in dupe_datas[list(dupe_datas)[self.file_count]]['occurences']:
                 if fp != filepath:
                     if os.path.isfile(fp):
-                        _log(f"Deleting {fp}", None)
-                        os.remove(fp)
+                        _log(f"Deleting {fp}", logfile)
+                        if not args['dry_run']:
+                            os.remove(fp)
                     else:
-                        _log(f"Invalid filpath - {fp}", None)
+                        _log(f"Invalid filpath - {fp}", logfile)
 
             # Increment
             self.file_count += 1
 
             # Quit when finished
             if self.file_count>=self.total:
-                log("End of dupe files, exiting", None)
+                _log("End of dupe files, exiting", logfile)
+                logfile.close()
                 exit()
 
             # Reload
@@ -232,9 +298,11 @@ if not args['no_deletion']:
             tk.Button(
                 self,
                 text = "Quit",
-                command = exit,
+                command = self.manual_quit,
             ).pack()
 
     # Launch app
     app = RemoveFilesApp()
     app.mainloop()
+
+logfile.close()

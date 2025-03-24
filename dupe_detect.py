@@ -194,7 +194,7 @@ time_elapsed = float(time.time()-time_start)
 
 _log("", logfile)
 _log(f"Folder analyzed in {round(time_elapsed, 5)} seconds", logfile)
-
+_log(f"{len(dupe_datas)} Dupes found", logfile)
 
 ### REMOVE FILES GUI
 if not args['no_deletion']:
@@ -223,7 +223,7 @@ if not args['no_deletion']:
             if len(prio)==1:
                 for fp in occurences:
                     if fp not in prio:
-                        _log(f"Deleting {fp}", logfile)
+                        _log(f"Automatic Deleting - {fp}", logfile)
                         if not args['dry_run']:
                             os.remove(fp)
                 dupe_to_remove.append(dupe)
@@ -264,7 +264,7 @@ if not args['no_deletion']:
             for fp in dupe_datas[list(dupe_datas)[self.file_count]]['occurences']:
                 if fp != filepath:
                     if os.path.isfile(fp):
-                        _log(f"Deleting {fp}", logfile)
+                        _log(f"Manual Deleting - {fp}", logfile)
                         if not args['dry_run']:
                             os.remove(fp)
                     else:
